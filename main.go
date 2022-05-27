@@ -37,10 +37,12 @@ func main() {
 	var fpath string
 	var outFile string
 	var verbose bool
+	var timeout time.Duration
 	flag.StringVar(&urlStr, "u", "", "the subscription url")
 	flag.StringVar(&fpath, "f", "", "the subscription file")
 	flag.StringVar(&outFile, "o", "", "also output to file")
 	flag.BoolVar(&verbose, "v", false, "verbose mode, print node detail")
+	flag.DurationVar(&timeout, "t", time.Duration(2)*time.Second, "timeout of tcp connection")
 	flag.Parse()
 	var content string
 	if fpath != "" {
@@ -81,8 +83,9 @@ func main() {
 	}()
 
 	var status string
+
 	for _, vs := range vss {
-		if tcpPing(vs) {
+		if tcpPing(vs, timeout) {
 			status = "OK "
 		} else {
 			status = "ERR"
@@ -131,9 +134,9 @@ func parse(data string) (vss []VServer) {
 	return vss
 }
 
-func tcpPing(vs VServer) bool {
+func tcpPing(vs VServer, timeout time.Duration) bool {
 	addr := fmt.Sprintf("%s:%d", vs.Add, vs.Port)
-	conn, err := net.DialTimeout("tcp", addr, time.Second*time.Duration(2))
+	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
 		return false
 	}
