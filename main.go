@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -30,6 +31,19 @@ type VServer struct {
 	Remark     string `json:"remark"`
 	ID         string `json:"id"`
 	Class      int    `json:"class"`
+}
+type vsList []VServer
+
+func (v vsList) Len() int { return len(v) }
+func (v vsList) Swap(i, j int) {
+	v[i], v[j] = v[j], v[i]
+}
+func (v vsList) Less(i, j int) bool {
+	if v[i].Class != v[j].Class {
+		return v[i].Class > v[j].Class
+	} else {
+		return strings.Compare(v[i].Add, v[j].Add) < 0
+	}
 }
 
 func main() {
@@ -83,7 +97,7 @@ func main() {
 	}()
 
 	var status string
-
+	sort.Sort(vsList(vss))
 	for _, vs := range vss {
 		if tcpPing(vs, timeout) {
 			status = "OK "
