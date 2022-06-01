@@ -32,6 +32,11 @@ type VServer struct {
 	ID         string `json:"id"`
 	Class      int    `json:"class"`
 }
+
+func (v VServer) String() string{
+	return fmt.Sprintf("{Add:%s Port:%d Ps:%s Path:%s Class:%d}",
+				v.Add,v.Port,v.Ps,v.Path,v.Class)
+}
 type vsList []VServer
 
 func (v vsList) Len() int { return len(v) }
@@ -58,6 +63,7 @@ func main() {
 	flag.BoolVar(&verbose, "v", false, "verbose mode, print node detail")
 	flag.DurationVar(&timeout, "t", time.Duration(2)*time.Second, "timeout of tcp connection")
 	flag.Parse()
+	log.SetFlags(0)
 	var content string
 	if fpath != "" {
 		b, err := ioutil.ReadFile(fpath)
@@ -79,7 +85,7 @@ func main() {
 		log.Fatalln("please at least specify one of the u or f")
 	}
 	vss := parse(content)
-	var s string
+
 	var f *os.File
 
 	if outFile != "" {
@@ -98,6 +104,7 @@ func main() {
 
 	var status string
 	sort.Sort(vsList(vss))
+	var s string
 	for _, vs := range vss {
 		if tcpPing(vs, timeout) {
 			status = "OK "
