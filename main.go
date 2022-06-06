@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
@@ -33,10 +34,11 @@ type VServer struct {
 	Class      int    `json:"class"`
 }
 
-func (v VServer) String() string{
+func (v VServer) String() string {
 	return fmt.Sprintf("{Add:%s Port:%d Ps:%s Path:%s Class:%d}",
-				v.Add,v.Port,v.Ps,v.Path,v.Class)
+		v.Add, v.Port, v.Ps, v.Path, v.Class)
 }
+
 type vsList []VServer
 
 func (v vsList) Len() int { return len(v) }
@@ -51,16 +53,22 @@ func (v vsList) Less(i, j int) bool {
 	}
 }
 
+var (
+	timeout time.Duration
+)
+
 func main() {
 	var urlStr string
 	var fpath string
 	var outFile string
 	var verbose bool
-	var timeout time.Duration
+	var concurrency int
+
 	flag.StringVar(&urlStr, "u", "", "the subscription url")
 	flag.StringVar(&fpath, "f", "", "the subscription file")
 	flag.StringVar(&outFile, "o", "", "also output to file")
 	flag.BoolVar(&verbose, "v", false, "verbose mode, print node detail")
+	flag.IntVar(&concurrency, "c", 1, "concurrency for per server")
 	flag.DurationVar(&timeout, "t", time.Duration(2)*time.Second, "timeout of tcp connection")
 	flag.Parse()
 	log.SetFlags(0)
@@ -79,7 +87,7 @@ func main() {
 		if err != nil {
 			log.Fatalln("can't read from url:", urlStr)
 		}
-		body, err := ioutil.ReadAll(resp.Body)
+		body, _ := ioutil.ReadAll(resp.Body)
 		content = string(body)
 	} else {
 		log.Fatalln("please at least specify one of the u or f")
@@ -105,8 +113,14 @@ func main() {
 	var status string
 	sort.Sort(vsList(vss))
 	var s string
+
+	queues := make([]chan VServer, concurrency)
+	ctx := context.Background()
+	for i := 0; i < concurrency; i++ {
+		go worker(ctx, queues[i])
+	}
 	for _, vs := range vss {
-		if tcpPing(vs, timeout) {
+		if doPing(vs) {
 			status = "OK "
 		} else {
 			status = "ERR"
@@ -118,7 +132,7 @@ func main() {
 		}
 		log.Print(s)
 		if f != nil {
-			f.WriteString(s)
+			_, _ = f.WriteString(s)
 		}
 	}
 
@@ -155,7 +169,24 @@ func parse(data string) (vss []VServer) {
 	return vss
 }
 
-func tcpPing(vs VServer, timeout time.Duration) bool {
+func doPing(vs VServer, queues []chan VServer) {
+	for i := 0; i < len(queues); i++ {
+		queues[i] <- vs
+	}
+
+}
+
+//向三个worker协程中发送任务，等待三个协程都完成，超过半数ping通则算ok
+func worker(ctx context.Context, queue <-chan VServer) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	case v := <-queue:
+		return tcpPing(v)
+	}
+}
+
+func tcpPing(vs VServer) bool {
 	addr := fmt.Sprintf("%s:%d", vs.Add, vs.Port)
 	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
